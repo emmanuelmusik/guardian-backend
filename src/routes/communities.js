@@ -5,6 +5,18 @@ import { requireAuth } from '../middleware/auth.js';
 const router = Router();
 router.use(requireAuth);
 
+// Browse all communities (not just ones you belong to), so aspirants
+// can find one to join. Returns just enough to decide, not full detail.
+router.get('/discover', async (req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('communities')
+    .select('id, name, description, created_at, profiles!communities_mentor_id_fkey(display_name)')
+    .order('created_at', { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
 // List communities the user belongs to or leads
 router.get('/', async (req, res) => {
   const { data, error } = await supabaseAdmin
