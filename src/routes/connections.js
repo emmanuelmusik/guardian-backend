@@ -10,7 +10,7 @@ router.use(requireAuth);
 router.get('/mentors', async (req, res) => {
   const { data: mentors, error } = await supabaseAdmin
     .from('profiles')
-    .select('id, display_name, bio')
+    .select('id, display_name, username, bio')
     .eq('role', 'mentor')
     .neq('id', req.user.id);
 
@@ -60,7 +60,7 @@ router.patch('/:id', async (req, res) => {
 router.get('/', async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from('mentor_connections')
-    .select('*')
+    .select('*, aspirant:profiles!mentor_connections_aspirant_id_fkey(id, display_name, username)')
     .or(`aspirant_id.eq.${req.user.id},mentor_id.eq.${req.user.id}`);
 
   if (error) return res.status(500).json({ error: error.message });

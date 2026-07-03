@@ -40,4 +40,42 @@ router.get('/search', async (req, res) => {
   res.json(data);
 });
 
+// Public profile view — anyone signed in can view anyone else's basic
+// profile, plus their connection status with that person if any.
+router.get('/:id', async (req, res) => {
+  const { id } = req.params;
+
+  const { data: person, error } = await supabaseAdmin
+    .from('profiles')
+    .select('id, display_name, username, bio, avatar_url, role, last_seen_at')
+    .eq('id', id)
+    .single();
+
+  if (error || !person) return res.status(404).json({ error: 'Person not found' });
+
+  if (person.id === req.user.id) {
+    return res.json({ ...person, myConnection: null, isSelf: true });
+  }
+
+  let myConnection = null;
+  if (person.role === 'mentor') {
+    const { data } = await supabaseAdmin
+      .from('mentor_connections')
+      .select('id, status')
+      .eq('aspirant_id', req.user.id)
+      .eq('mentor_id', person.id)
+      .maybeSingle();
+    if (data) myConnection = { type: 'mentor', ...data };
+  } else {
+    const { data } = await supabaseAdmin
+      .from('peer_connections')
+      .select('id, status, requester_id')
+      .or(`and(requester_id.eq.${req.user.id},recipient_id.eq.${person.id}),and(requester_id.eq.${person.id},recipient_id.eq.${req.user.id})`)
+      .maybeSingle();
+    if (data) myConnection = { type: 'peer', ...data };
+  }
+
+  res.json({ ...person, myConnection, isSelf: false });
+});
+
 export default router;

@@ -10,7 +10,7 @@ router.use(requireAuth);
 router.get('/aspirants', async (req, res) => {
   const { data: aspirants, error } = await supabaseAdmin
     .from('profiles')
-    .select('id, display_name, bio')
+    .select('id, display_name, username, bio')
     .eq('role', 'aspirant')
     .neq('id', req.user.id);
 
@@ -70,7 +70,7 @@ router.get('/', async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from('peer_connections')
     .select(
-      '*, requester:profiles!peer_connections_requester_id_fkey(display_name), recipient:profiles!peer_connections_recipient_id_fkey(display_name)'
+      '*, requester:profiles!peer_connections_requester_id_fkey(id, display_name, username), recipient:profiles!peer_connections_recipient_id_fkey(id, display_name, username)'
     )
     .or(`requester_id.eq.${req.user.id},recipient_id.eq.${req.user.id}`);
 

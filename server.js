@@ -14,6 +14,7 @@ import featuredMaterialsRouter from './src/routes/featuredMaterials.js';
 import peerConnectionsRouter from './src/routes/peerConnections.js';
 import notificationsRouter from './src/routes/notifications.js';
 import usersRouter from './src/routes/users.js';
+import messagesRouter from './src/routes/messages.js';
 
 dotenv.config();
 
@@ -35,6 +36,7 @@ app.use('/api/featured-materials', featuredMaterialsRouter);
 app.use('/api/peer-connections', peerConnectionsRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/users', usersRouter);
+app.use('/api/messages', messagesRouter);
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`Guardian backend running on port ${PORT}`));
