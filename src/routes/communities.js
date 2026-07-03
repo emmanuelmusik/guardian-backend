@@ -1,6 +1,13 @@
 import { Router } from 'express';
+import multer from 'multer';
+import crypto from 'node:crypto';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requireAuth } from '../middleware/auth.js';
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB, matching the frontend cap
+});
 
 const router = Router();
 router.use(requireAuth);
@@ -149,6 +156,74 @@ router.post('/:id/messages', async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
   res.status(201).json(data);
+});
+
+// Upload a photo/video/audio attachment for a community, server-side.
+// The backend's service client writes to storage, so browser-to-storage
+// policy issues can't get in the way. Membership is checked here instead.
+router.post('/:id/media', upload.single('file'), async (req, res) => {
+  const { id } = req.params;
+
+  const { data: membership } = await supabaseAdmin
+    .from('community_members')
+    .select('role')
+    .eq('community_id', id)
+    .eq('user_id', req.user.id)
+    .maybeSingle();
+
+  if (!membership) return res.status(403).json({ error: 'Not a member of this community' });
+  if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+  const mime = req.file.mimetype || '';
+  const attachmentType = mime.startsWith('image/')
+    ? 'image'
+    : mime.startsWith('video/')
+      ? 'video'
+      : mime.startsWith('audio/')
+        ? 'audio'
+        : null;
+
+  if (!attachmentType) {
+    return res.status(400).json({ error: 'Only image, video, and audio files are supported' });
+  }
+
+  const safeName = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const path = `${id}/${crypto.randomUUID()}-${safeName}`;
+
+  const { error: uploadError } = await supabaseAdmin.storage
+    .from('community-media')
+    .upload(path, req.file.buffer, { contentType: mime });
+
+  if (uploadError) return res.status(500).json({ error: uploadError.message });
+
+  res.status(201).json({ attachment_path: path, attachment_type: attachmentType });
+});
+
+// Get a temporary viewing URL for an attachment — membership checked here,
+// then a short-lived signed URL is issued by the server.
+router.get('/:id/media-url', async (req, res) => {
+  const { id } = req.params;
+  const { path } = req.query;
+
+  if (!path || !String(path).startsWith(`${id}/`)) {
+    return res.status(400).json({ error: 'Invalid attachment path' });
+  }
+
+  const { data: membership } = await supabaseAdmin
+    .from('community_members')
+    .select('role')
+    .eq('community_id', id)
+    .eq('user_id', req.user.id)
+    .maybeSingle();
+
+  if (!membership) return res.status(403).json({ error: 'Not a member of this community' });
+
+  const { data, error } = await supabaseAdmin.storage
+    .from('community-media')
+    .createSignedUrl(String(path), 3600);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ url: data.signedUrl });
 });
 
 export default router;
