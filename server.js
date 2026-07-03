@@ -10,6 +10,7 @@ import studyMaterialsRouter from './src/routes/studyMaterials.js';
 import livekitRouter from './src/routes/livekit.js';
 import bibleRouter from './src/routes/bible.js';
 import profileRouter from './src/routes/profile.js';
+import featuredMaterialsRouter from './src/routes/featuredMaterials.js';
 
 dotenv.config();
 
@@ -27,6 +28,7 @@ app.use('/api/study-materials', studyMaterialsRouter);
 app.use('/api/livekit', livekitRouter);
 app.use('/api/bible', bibleRouter);
 app.use('/api/profile', profileRouter);
+app.use('/api/featured-materials', featuredMaterialsRouter);
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`Guardian backend running on port ${PORT}`));
