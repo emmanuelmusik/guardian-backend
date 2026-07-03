@@ -69,12 +69,50 @@ router.delete('/:id', async (req, res) => {
   res.status(204).send();
 });
 
-// Entries shared with the current user in their capacity as a mentor
-router.get('/shared-with-me', async (req, res) => {
+// Entries shared to a specific community — only visible to its members
+router.get('/community/:communityId', async (req, res) => {
+  const { communityId } = req.params;
+
+  const { data: membership } = await supabaseAdmin
+    .from('community_members')
+    .select('role')
+    .eq('community_id', communityId)
+    .eq('user_id', req.user.id)
+    .maybeSingle();
+
+  if (!membership) return res.status(403).json({ error: 'Not a member of this community' });
+
   const { data, error } = await supabaseAdmin
     .from('entries')
     .select('*, profiles!entries_user_id_fkey(display_name, avatar_url)')
-    .eq('visibility', 'mentor');
+    .eq('visibility', 'community')
+    .eq('shared_community_id', communityId)
+    .order('created_at', { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// Entries shared with the current user in their capacity as a mentor —
+// only from aspirants who have this user as an accepted mentor connection
+router.get('/shared-with-me', async (req, res) => {
+  const { data: connections, error: connError } = await supabaseAdmin
+    .from('mentor_connections')
+    .select('aspirant_id')
+    .eq('mentor_id', req.user.id)
+    .eq('status', 'accepted');
+
+  if (connError) return res.status(500).json({ error: connError.message });
+
+  const aspirantIds = (connections || []).map((c) => c.aspirant_id);
+  if (aspirantIds.length === 0) return res.json([]);
+
+  const { data, error } = await supabaseAdmin
+    .from('entries')
+    .select('*, profiles!entries_user_id_fkey(display_name, avatar_url)')
+    .eq('visibility', 'mentor')
+    .in('user_id', aspirantIds)
+    .order('created_at', { ascending: false });
 
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);

@@ -62,6 +62,29 @@ router.post('/:id/join', async (req, res) => {
   res.status(201).json(data);
 });
 
+// Get a single community's detail — only if the requester is a member
+router.get('/:id', async (req, res) => {
+  const { id } = req.params;
+
+  const { data: membership } = await supabaseAdmin
+    .from('community_members')
+    .select('role')
+    .eq('community_id', id)
+    .eq('user_id', req.user.id)
+    .maybeSingle();
+
+  if (!membership) return res.status(403).json({ error: 'Not a member of this community' });
+
+  const { data, error } = await supabaseAdmin
+    .from('communities')
+    .select('*, profiles!communities_mentor_id_fkey(display_name)')
+    .eq('id', id)
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ...data, myRole: membership.role });
+});
+
 // List members of a community
 router.get('/:id/members', async (req, res) => {
   const { id } = req.params;

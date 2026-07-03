@@ -5,6 +5,26 @@ import { requireAuth } from '../middleware/auth.js';
 const router = Router();
 router.use(requireAuth);
 
+// Browse mentors to request a connection with, showing your current
+// status with each (none / pending / accepted / declined)
+router.get('/mentors', async (req, res) => {
+  const { data: mentors, error } = await supabaseAdmin
+    .from('profiles')
+    .select('id, display_name, bio')
+    .eq('role', 'mentor')
+    .neq('id', req.user.id);
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  const { data: myConnections } = await supabaseAdmin
+    .from('mentor_connections')
+    .select('mentor_id, status')
+    .eq('aspirant_id', req.user.id);
+
+  const statusByMentor = Object.fromEntries((myConnections || []).map((c) => [c.mentor_id, c.status]));
+  res.json(mentors.map((m) => ({ ...m, connectionStatus: statusByMentor[m.id] || null })));
+});
+
 // Aspirant requests a 1:1 mentor connection
 router.post('/', async (req, res) => {
   const { mentor_id } = req.body;
