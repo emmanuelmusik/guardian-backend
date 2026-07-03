@@ -11,11 +11,25 @@ Railway's dashboard.
 
 ## 2. Get the code into the repo
 
-Easiest way, no terminal needed:
-- On the new repo's page, click "uploading an existing file"
-- Drag in everything from the `guardian-backend` folder (including the
-  `src` folder — GitHub's uploader supports folders)
-- Commit the upload
+**Download the code as one file:**
+- Click the `guardian-backend.zip` link below this message
+- Save it somewhere you'll remember, like your Desktop or Downloads folder
+
+**Unzip it:**
+- Mac: double-click the zip file — it creates a `guardian-backend` folder next to it
+- Windows: right-click the zip file > "Extract All" — same result
+
+**Upload it to GitHub:**
+- Go to your new empty repo's page on github.com
+- You'll see a line of text that says something like "Get started by creating a new file" with a blue link "**uploading an existing file**" — click that link
+- A new page opens with a big dashed box that says "Drag files here to add them to your repository"
+- Open the `guardian-backend` folder you just unzipped in Finder (Mac) or File Explorer (Windows)
+- Select everything **inside** that folder (all the files and the `src` folder — Ctrl+A / Cmd+A selects all)
+- Drag that selection into the dashed box on the GitHub page
+- Wait for the file list to finish appearing — this can take a few seconds
+- Scroll down, you'll see a green "Commit changes" button — click it
+
+That's it. Your repo now has all the code.
 
 ## 3. Connect Railway to the repo
 

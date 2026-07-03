@@ -9,6 +9,7 @@ import commentsRouter from './src/routes/comments.js';
 import studyMaterialsRouter from './src/routes/studyMaterials.js';
 import livekitRouter from './src/routes/livekit.js';
 import bibleRouter from './src/routes/bible.js';
+import profileRouter from './src/routes/profile.js';
 
 dotenv.config();
 
@@ -25,6 +26,7 @@ app.use('/api/comments', commentsRouter);
 app.use('/api/study-materials', studyMaterialsRouter);
 app.use('/api/livekit', livekitRouter);
 app.use('/api/bible', bibleRouter);
+app.use('/api/profile', profileRouter);
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`Guardian backend running on port ${PORT}`));
