@@ -152,7 +152,7 @@ router.patch('/:id/join-requests/:userId', async (req, res) => {
   res.json(data);
 });
 
-// Mentor removes an existing member from the community
+// Mentor removes an existing member, or a member removes themselves (leaves)
 router.delete('/:id/members/:userId', async (req, res) => {
   const { id, userId } = req.params;
 
@@ -162,11 +162,16 @@ router.delete('/:id/members/:userId', async (req, res) => {
     .eq('id', id)
     .single();
 
-  if (!community || community.mentor_id !== req.user.id) {
-    return res.status(403).json({ error: "Only this community's mentor can remove members" });
+  if (!community) return res.status(404).json({ error: 'Community not found' });
+
+  const isMentor = community.mentor_id === req.user.id;
+  const isSelf = userId === req.user.id;
+
+  if (!isMentor && !isSelf) {
+    return res.status(403).json({ error: "Only this community's mentor can remove other members" });
   }
-  if (userId === req.user.id) {
-    return res.status(400).json({ error: "You can't remove yourself as the community's mentor" });
+  if (isSelf && isMentor) {
+    return res.status(400).json({ error: "As the mentor, you can't leave — delete the community instead if you want to close it" });
   }
 
   const { error } = await supabaseAdmin
@@ -175,6 +180,57 @@ router.delete('/:id/members/:userId', async (req, res) => {
     .eq('community_id', id)
     .eq('user_id', userId);
 
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(204).send();
+});
+
+// Mentor edits the community's name/description
+router.patch('/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, description } = req.body;
+
+  const { data: community } = await supabaseAdmin
+    .from('communities')
+    .select('mentor_id')
+    .eq('id', id)
+    .single();
+
+  if (!community || community.mentor_id !== req.user.id) {
+    return res.status(403).json({ error: "Only this community's mentor can edit it" });
+  }
+
+  const updates = {};
+  if (name !== undefined) updates.name = name;
+  if (description !== undefined) updates.description = description;
+
+  const { data, error } = await supabaseAdmin
+    .from('communities')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// Mentor deletes the community entirely (members, chat, and call
+// history cascade via the foreign keys in schema.sql; shared entries
+// just get unlinked, not deleted, since they belong to their authors)
+router.delete('/:id', async (req, res) => {
+  const { id } = req.params;
+
+  const { data: community } = await supabaseAdmin
+    .from('communities')
+    .select('mentor_id')
+    .eq('id', id)
+    .single();
+
+  if (!community || community.mentor_id !== req.user.id) {
+    return res.status(403).json({ error: "Only this community's mentor can delete it" });
+  }
+
+  const { error } = await supabaseAdmin.from('communities').delete().eq('id', id);
   if (error) return res.status(500).json({ error: error.message });
   res.status(204).send();
 });

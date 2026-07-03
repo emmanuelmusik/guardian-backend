@@ -36,4 +36,32 @@ router.post('/entry/:entryId', async (req, res) => {
   res.status(201).json(data);
 });
 
+// Edit a comment (author only)
+router.patch('/:id', async (req, res) => {
+  const { body } = req.body;
+
+  const { data, error } = await supabaseAdmin
+    .from('comments')
+    .update({ body })
+    .eq('id', req.params.id)
+    .eq('author_id', req.user.id)
+    .select('*, profiles(display_name, username, avatar_url)')
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// Delete a comment (author only)
+router.delete('/:id', async (req, res) => {
+  const { error } = await supabaseAdmin
+    .from('comments')
+    .delete()
+    .eq('id', req.params.id)
+    .eq('author_id', req.user.id);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(204).send();
+});
+
 export default router;

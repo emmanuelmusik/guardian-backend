@@ -1,6 +1,13 @@
 import { Router } from 'express';
+import multer from 'multer';
+import crypto from 'node:crypto';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requireAuth } from '../middleware/auth.js';
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB — these are curated, less frequent uploads
+});
 
 const router = Router();
 router.use(requireAuth);
@@ -57,6 +64,27 @@ router.delete('/:id', async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
   res.status(204).send();
+});
+
+// Admin-only: upload a file directly (instead of pasting a URL) and get
+// back a public URL to use as a featured material's `url`
+router.post('/upload', upload.single('file'), async (req, res) => {
+  if (!(await isAdmin(req.user.id))) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+  const safeName = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const path = `${crypto.randomUUID()}-${safeName}`;
+
+  const { error: uploadError } = await supabaseAdmin.storage
+    .from('featured-media')
+    .upload(path, req.file.buffer, { contentType: req.file.mimetype });
+
+  if (uploadError) return res.status(500).json({ error: uploadError.message });
+
+  const { data } = supabaseAdmin.storage.from('featured-media').getPublicUrl(path);
+  res.status(201).json({ url: data.publicUrl });
 });
 
 export default router;
