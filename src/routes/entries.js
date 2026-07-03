@@ -96,7 +96,7 @@ router.get('/community/:communityId', async (req, res) => {
 
   const { data, error } = await supabaseAdmin
     .from('entries')
-    .select('*, profiles!entries_user_id_fkey(display_name, avatar_url)')
+    .select('*, profiles!entries_user_id_fkey(display_name, username, avatar_url)')
     .eq('visibility', 'community')
     .eq('shared_community_id', communityId)
     .order('created_at', { ascending: false });
@@ -121,7 +121,7 @@ router.get('/shared-with-me', async (req, res) => {
 
   const { data, error } = await supabaseAdmin
     .from('entries')
-    .select('*, profiles!entries_user_id_fkey(display_name, avatar_url)')
+    .select('*, profiles!entries_user_id_fkey(display_name, username, avatar_url)')
     .eq('visibility', 'mentor')
     .in('user_id', aspirantIds)
     .order('created_at', { ascending: false });
@@ -134,7 +134,7 @@ router.get('/shared-with-me', async (req, res) => {
 router.get('/shared-with-peer', async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from('entries')
-    .select('*, profiles!entries_user_id_fkey(display_name, avatar_url)')
+    .select('*, profiles!entries_user_id_fkey(display_name, username, avatar_url)')
     .eq('visibility', 'peer')
     .eq('shared_peer_id', req.user.id)
     .order('created_at', { ascending: false });

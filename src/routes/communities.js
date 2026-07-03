@@ -13,19 +13,16 @@ const upload = multer({
 const router = Router();
 router.use(requireAuth);
 
-// Browse all communities (not just ones you belong to), so aspirants
-// can find one to request to join.
 router.get('/discover', async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from('communities')
-    .select('id, name, description, created_at, profiles!communities_mentor_id_fkey(display_name)')
+    .select('id, name, description, created_at, profiles!communities_mentor_id_fkey(display_name, username)')
     .order('created_at', { ascending: false });
 
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
 
-// List communities/requests the user belongs to or has requested to join
 router.get('/', async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from('community_members')
@@ -36,7 +33,6 @@ router.get('/', async (req, res) => {
   res.json(data);
 });
 
-// Mentor creates a new community
 router.post('/', async (req, res) => {
   const { name, description } = req.body;
 
@@ -55,8 +51,6 @@ router.post('/', async (req, res) => {
   res.status(201).json(community);
 });
 
-// Request to join a community — creates a pending membership, not an
-// active one. The community's mentor must approve it.
 router.post('/:id/join', async (req, res) => {
   const { id } = req.params;
 
@@ -91,7 +85,6 @@ router.post('/:id/join', async (req, res) => {
   res.status(201).json(data);
 });
 
-// Mentor views pending join requests for their community
 router.get('/:id/join-requests', async (req, res) => {
   const { id } = req.params;
 
@@ -107,7 +100,7 @@ router.get('/:id/join-requests', async (req, res) => {
 
   const { data, error } = await supabaseAdmin
     .from('community_members')
-    .select('user_id, status, joined_at, profiles(id, display_name, avatar_url)')
+    .select('user_id, status, joined_at, profiles(id, display_name, username, avatar_url)')
     .eq('community_id', id)
     .eq('status', 'pending');
 
@@ -115,10 +108,9 @@ router.get('/:id/join-requests', async (req, res) => {
   res.json(data);
 });
 
-// Mentor accepts or declines a join request
 router.patch('/:id/join-requests/:userId', async (req, res) => {
   const { id, userId } = req.params;
-  const { status } = req.body; // 'accepted' | 'declined'
+  const { status } = req.body;
 
   const { data: community } = await supabaseAdmin
     .from('communities')
@@ -160,8 +152,33 @@ router.patch('/:id/join-requests/:userId', async (req, res) => {
   res.json(data);
 });
 
-// Get a single community's detail — only if the requester has some
-// membership row (pending or accepted) or is the mentor.
+// Mentor removes an existing member from the community
+router.delete('/:id/members/:userId', async (req, res) => {
+  const { id, userId } = req.params;
+
+  const { data: community } = await supabaseAdmin
+    .from('communities')
+    .select('mentor_id')
+    .eq('id', id)
+    .single();
+
+  if (!community || community.mentor_id !== req.user.id) {
+    return res.status(403).json({ error: "Only this community's mentor can remove members" });
+  }
+  if (userId === req.user.id) {
+    return res.status(400).json({ error: "You can't remove yourself as the community's mentor" });
+  }
+
+  const { error } = await supabaseAdmin
+    .from('community_members')
+    .delete()
+    .eq('community_id', id)
+    .eq('user_id', userId);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(204).send();
+});
+
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
 
@@ -176,7 +193,7 @@ router.get('/:id', async (req, res) => {
 
   const { data, error } = await supabaseAdmin
     .from('communities')
-    .select('*, profiles!communities_mentor_id_fkey(display_name)')
+    .select('*, profiles!communities_mentor_id_fkey(display_name, username)')
     .eq('id', id)
     .single();
 
@@ -184,7 +201,6 @@ router.get('/:id', async (req, res) => {
   res.json({ ...data, myRole: membership.role, myStatus: membership.status });
 });
 
-// List accepted members of a community
 router.get('/:id/members', async (req, res) => {
   const { id } = req.params;
 
@@ -193,7 +209,7 @@ router.get('/:id/members', async (req, res) => {
 
   const { data, error } = await supabaseAdmin
     .from('community_members')
-    .select('role, joined_at, profiles(id, display_name, avatar_url)')
+    .select('role, joined_at, profiles(id, display_name, username, avatar_url, last_seen_at)')
     .eq('community_id', id)
     .eq('status', 'accepted');
 
@@ -201,7 +217,6 @@ router.get('/:id/members', async (req, res) => {
   res.json(data);
 });
 
-// Discussion chat
 router.get('/:id/messages', async (req, res) => {
   const { id } = req.params;
 
@@ -210,7 +225,7 @@ router.get('/:id/messages', async (req, res) => {
 
   const { data, error } = await supabaseAdmin
     .from('community_messages')
-    .select('*, profiles(display_name, avatar_url)')
+    .select('*, profiles(display_name, username, avatar_url)')
     .eq('community_id', id)
     .order('created_at', { ascending: true });
 
@@ -234,12 +249,11 @@ router.post('/:id/messages', async (req, res) => {
       attachment_path: attachment_path || null,
       attachment_type: attachment_type || null,
     })
-    .select('*, profiles(display_name, avatar_url)')
+    .select('*, profiles(display_name, username, avatar_url)')
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
 
-  // Notify every other accepted member that something new was posted
   const { data: members } = await supabaseAdmin
     .from('community_members')
     .select('user_id')
@@ -263,7 +277,34 @@ router.post('/:id/messages', async (req, res) => {
   res.status(201).json(data);
 });
 
-// Upload a photo/video/audio attachment for a community, server-side.
+// Delete a community message — only the person who posted it, or the
+// community's mentor (moderation), can remove it.
+router.delete('/:id/messages/:messageId', async (req, res) => {
+  const { id, messageId } = req.params;
+
+  const { data: message } = await supabaseAdmin
+    .from('community_messages')
+    .select('author_id')
+    .eq('id', messageId)
+    .eq('community_id', id)
+    .single();
+
+  if (!message) return res.status(404).json({ error: 'Message not found' });
+
+  const { data: community } = await supabaseAdmin
+    .from('communities')
+    .select('mentor_id')
+    .eq('id', id)
+    .single();
+
+  const canDelete = message.author_id === req.user.id || community?.mentor_id === req.user.id;
+  if (!canDelete) return res.status(403).json({ error: 'Only the author or the community mentor can delete this' });
+
+  const { error } = await supabaseAdmin.from('community_messages').delete().eq('id', messageId);
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(204).send();
+});
+
 router.post('/:id/media', upload.single('file'), async (req, res) => {
   const { id } = req.params;
 
@@ -296,7 +337,6 @@ router.post('/:id/media', upload.single('file'), async (req, res) => {
   res.status(201).json({ attachment_path: path, attachment_type: attachmentType });
 });
 
-// Get a temporary viewing URL for an attachment
 router.get('/:id/media-url', async (req, res) => {
   const { id } = req.params;
   const { path } = req.query;

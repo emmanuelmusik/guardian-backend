@@ -13,7 +13,7 @@ router.get('/entry/:entryId', async (req, res) => {
 
   const { data, error } = await supabaseAdmin
     .from('comments')
-    .select('*, profiles(display_name, avatar_url)')
+    .select('*, profiles(display_name, username, avatar_url)')
     .eq('entry_id', entryId)
     .order('created_at', { ascending: true });
 
@@ -29,7 +29,7 @@ router.post('/entry/:entryId', async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from('comments')
     .insert({ entry_id: entryId, author_id: req.user.id, body })
-    .select()
+    .select('*, profiles(display_name, username, avatar_url)')
     .single();
 
   if (error) return res.status(500).json({ error: error.message });

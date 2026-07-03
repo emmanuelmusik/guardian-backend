@@ -52,4 +52,16 @@ router.patch('/', async (req, res) => {
   res.json(data);
 });
 
+// Lightweight endpoint hit periodically by the frontend to mark the
+// user as online — no other profile fields are touched.
+router.post('/heartbeat', async (req, res) => {
+  const { error } = await supabaseAdmin
+    .from('profiles')
+    .update({ last_seen_at: new Date().toISOString() })
+    .eq('id', req.user.id);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(204).send();
+});
+
 export default router;
