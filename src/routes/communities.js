@@ -98,4 +98,57 @@ router.get('/:id/members', async (req, res) => {
   res.json(data);
 });
 
+// General discussion chat for a community, separate from feedback on
+// specific shared entries — for anything a member wants to say to the group.
+router.get('/:id/messages', async (req, res) => {
+  const { id } = req.params;
+
+  const { data: membership } = await supabaseAdmin
+    .from('community_members')
+    .select('role')
+    .eq('community_id', id)
+    .eq('user_id', req.user.id)
+    .maybeSingle();
+
+  if (!membership) return res.status(403).json({ error: 'Not a member of this community' });
+
+  const { data, error } = await supabaseAdmin
+    .from('community_messages')
+    .select('*, profiles(display_name, avatar_url)')
+    .eq('community_id', id)
+    .order('created_at', { ascending: true });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+router.post('/:id/messages', async (req, res) => {
+  const { id } = req.params;
+  const { body, attachment_path, attachment_type } = req.body;
+
+  const { data: membership } = await supabaseAdmin
+    .from('community_members')
+    .select('role')
+    .eq('community_id', id)
+    .eq('user_id', req.user.id)
+    .maybeSingle();
+
+  if (!membership) return res.status(403).json({ error: 'Not a member of this community' });
+
+  const { data, error } = await supabaseAdmin
+    .from('community_messages')
+    .insert({
+      community_id: id,
+      author_id: req.user.id,
+      body: body || '',
+      attachment_path: attachment_path || null,
+      attachment_type: attachment_type || null,
+    })
+    .select('*, profiles(display_name, avatar_url)')
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(201).json(data);
+});
+
 export default router;
