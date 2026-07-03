@@ -18,15 +18,23 @@ router.get('/', async (req, res) => {
 });
 
 // Update the current user's profile. Used for the role-selection step
-// right after first sign-in (aspirant vs mentor), and for editing
-// display name/bio later.
+// right after first sign-in (aspirant vs mentor), editing display
+// name/bio later, and setting a username.
 router.patch('/', async (req, res) => {
-  const { role, display_name, bio, onboarded } = req.body;
+  const { role, display_name, bio, onboarded, username } = req.body;
   const updates = { updated_at: new Date().toISOString() };
   if (role !== undefined) updates.role = role;
   if (display_name !== undefined) updates.display_name = display_name;
   if (bio !== undefined) updates.bio = bio;
   if (onboarded !== undefined) updates.onboarded = onboarded;
+
+  if (username !== undefined) {
+    const normalized = String(username).toLowerCase().trim();
+    if (!/^[a-z0-9_]{3,20}$/.test(normalized)) {
+      return res.status(400).json({ error: 'Username must be 3-20 characters: lowercase letters, numbers, underscores' });
+    }
+    updates.username = normalized;
+  }
 
   const { data, error } = await supabaseAdmin
     .from('profiles')
@@ -35,7 +43,12 @@ router.patch('/', async (req, res) => {
     .select()
     .single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'That username is already taken' });
+    }
+    return res.status(500).json({ error: error.message });
+  }
   res.json(data);
 });
 

@@ -9,6 +9,16 @@ router.use(requireAuth);
 router.get('/community/:communityId', async (req, res) => {
   const { communityId } = req.params;
 
+  const { data: membership } = await supabaseAdmin
+    .from('community_members')
+    .select('role')
+    .eq('community_id', communityId)
+    .eq('user_id', req.user.id)
+    .eq('status', 'accepted')
+    .maybeSingle();
+
+  if (!membership) return res.status(403).json({ error: 'Not an accepted member of this community' });
+
   const { data, error } = await supabaseAdmin
     .from('study_materials')
     .select('*')
@@ -30,6 +40,7 @@ router.post('/', async (req, res) => {
     .select('role')
     .eq('community_id', community_id)
     .eq('user_id', req.user.id)
+    .eq('status', 'accepted')
     .maybeSingle();
 
   if (!membership || membership.role !== 'mentor') {
