@@ -37,7 +37,32 @@ router.get('/search', async (req, res) => {
     .limit(15);
 
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+
+  const mentorIds = data.filter((p) => p.role === 'mentor').map((p) => p.id);
+  const aspirantIds = data.filter((p) => p.role === 'aspirant').map((p) => p.id);
+
+  const [mentorConnRes, peerAsRequesterRes, peerAsRecipientRes] = await Promise.all([
+    mentorIds.length
+      ? supabaseAdmin.from('mentor_connections').select('mentor_id, status').eq('aspirant_id', req.user.id).in('mentor_id', mentorIds)
+      : Promise.resolve({ data: [] }),
+    aspirantIds.length
+      ? supabaseAdmin.from('peer_connections').select('recipient_id, status').eq('requester_id', req.user.id).in('recipient_id', aspirantIds)
+      : Promise.resolve({ data: [] }),
+    aspirantIds.length
+      ? supabaseAdmin.from('peer_connections').select('requester_id, status').eq('recipient_id', req.user.id).in('requester_id', aspirantIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const mentorStatus = Object.fromEntries((mentorConnRes.data || []).map((c) => [c.mentor_id, c.status]));
+  const peerStatusA = Object.fromEntries((peerAsRequesterRes.data || []).map((c) => [c.recipient_id, c.status]));
+  const peerStatusB = Object.fromEntries((peerAsRecipientRes.data || []).map((c) => [c.requester_id, c.status]));
+
+  const enriched = data.map((p) => ({
+    ...p,
+    connectionStatus: p.role === 'mentor' ? mentorStatus[p.id] || null : peerStatusA[p.id] || peerStatusB[p.id] || null,
+  }));
+
+  res.json(enriched);
 });
 
 // Public profile view — anyone signed in can view anyone else's basic

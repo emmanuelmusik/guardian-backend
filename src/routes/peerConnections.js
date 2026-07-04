@@ -44,7 +44,12 @@ router.post('/', async (req, res) => {
     .select()
     .single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({ error: "You've already sent this person a request." });
+    }
+    return res.status(500).json({ error: error.message });
+  }
   res.status(201).json(data);
 });
 
