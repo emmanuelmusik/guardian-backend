@@ -2,30 +2,25 @@ import { Router } from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requireAuth } from '../middleware/auth.js';
 import { notify } from '../lib/notify.js';
+import { connectedUserIds, isConnected } from '../lib/connections.js';
 
 const router = Router();
 router.use(requireAuth);
 
-async function connectedUserIds(userId) {
-  const [{ data: asAspirant }, { data: asMentor }, { data: peerA }, { data: peerB }] = await Promise.all([
-    supabaseAdmin.from('mentor_connections').select('mentor_id').eq('aspirant_id', userId).eq('status', 'accepted'),
-    supabaseAdmin.from('mentor_connections').select('aspirant_id').eq('mentor_id', userId).eq('status', 'accepted'),
-    supabaseAdmin.from('peer_connections').select('recipient_id').eq('requester_id', userId).eq('status', 'accepted'),
-    supabaseAdmin.from('peer_connections').select('requester_id').eq('recipient_id', userId).eq('status', 'accepted'),
-  ]);
+// Plain list of everyone the user is connected with — used by the
+// "share this entry with someone" picker as well as the conversation list.
+router.get('/connections', async (req, res) => {
+  const ids = Array.from(await connectedUserIds(req.user.id));
+  if (ids.length === 0) return res.json([]);
 
-  const ids = new Set();
-  (asAspirant || []).forEach((r) => ids.add(r.mentor_id));
-  (asMentor || []).forEach((r) => ids.add(r.aspirant_id));
-  (peerA || []).forEach((r) => ids.add(r.recipient_id));
-  (peerB || []).forEach((r) => ids.add(r.requester_id));
-  return ids;
-}
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .select('id, display_name, username, avatar_url')
+    .in('id', ids);
 
-async function isConnected(userA, userB) {
-  const ids = await connectedUserIds(userA);
-  return ids.has(userB);
-}
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
 
 // List everyone you're connected with, plus a preview of your most
 // recent message and unread count for each

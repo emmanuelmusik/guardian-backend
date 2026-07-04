@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requireAuth } from '../middleware/auth.js';
+import { isConnected } from '../lib/connections.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -19,10 +20,15 @@ router.get('/', async (req, res) => {
 
 // Create a new entry (dream, vision, intuition, or note)
 router.post('/', async (req, res) => {
-  const { type, title, content, audio_url, transcript, visibility, shared_community_id, shared_peer_id } = req.body;
+  const { type, title, content, audio_url, transcript, visibility, shared_community_id, shared_peer_id, shared_with_user_id } = req.body;
 
   if (visibility === 'peer' && shared_peer_id) {
     const allowed = await hasAcceptedPeerConnection(req.user.id, shared_peer_id);
+    if (!allowed) return res.status(403).json({ error: "You're not connected with that person yet" });
+  }
+
+  if (visibility === 'person' && shared_with_user_id) {
+    const allowed = await isConnected(req.user.id, shared_with_user_id);
     if (!allowed) return res.status(403).json({ error: "You're not connected with that person yet" });
   }
 
@@ -38,6 +44,7 @@ router.post('/', async (req, res) => {
       visibility: visibility || 'private',
       shared_community_id: visibility === 'community' ? shared_community_id : null,
       shared_peer_id: visibility === 'peer' ? shared_peer_id : null,
+      shared_with_user_id: visibility === 'person' ? shared_with_user_id : null,
     })
     .select()
     .single();
@@ -53,6 +60,11 @@ router.patch('/:id', async (req, res) => {
 
   if (updates.visibility === 'peer' && updates.shared_peer_id) {
     const allowed = await hasAcceptedPeerConnection(req.user.id, updates.shared_peer_id);
+    if (!allowed) return res.status(403).json({ error: "You're not connected with that person yet" });
+  }
+
+  if (updates.visibility === 'person' && updates.shared_with_user_id) {
+    const allowed = await isConnected(req.user.id, updates.shared_with_user_id);
     if (!allowed) return res.status(403).json({ error: "You're not connected with that person yet" });
   }
 
@@ -137,6 +149,20 @@ router.get('/shared-with-peer', async (req, res) => {
     .select('*, profiles!entries_user_id_fkey(display_name, username, avatar_url)')
     .eq('visibility', 'peer')
     .eq('shared_peer_id', req.user.id)
+    .order('created_at', { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// Entries someone chose to share directly with you (any connection,
+// not tied to the mentor/peer categories)
+router.get('/shared-with-user', async (req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('entries')
+    .select('*, profiles!entries_user_id_fkey(display_name, username, avatar_url)')
+    .eq('visibility', 'person')
+    .eq('shared_with_user_id', req.user.id)
     .order('created_at', { ascending: false });
 
   if (error) return res.status(500).json({ error: error.message });
