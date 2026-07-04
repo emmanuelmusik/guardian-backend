@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import crypto from 'node:crypto';
+import PDFDocument from 'pdfkit';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -84,24 +85,95 @@ router.post('/avatar', upload.single('file'), async (req, res) => {
 });
 
 // Export everything the user has created — profile, journal entries,
-// comments they've written, and community messages they've posted.
+// comments they've written, and community messages they've posted —
+// as a readable PDF document.
 router.get('/export', async (req, res) => {
   const userId = req.user.id;
 
   const [profileRes, entriesRes, commentsRes, messagesRes] = await Promise.all([
     supabaseAdmin.from('profiles').select('*').eq('id', userId).single(),
-    supabaseAdmin.from('entries').select('*').eq('user_id', userId),
-    supabaseAdmin.from('comments').select('*').eq('author_id', userId),
-    supabaseAdmin.from('community_messages').select('*').eq('author_id', userId),
+    supabaseAdmin.from('entries').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+    supabaseAdmin.from('comments').select('*').eq('author_id', userId).order('created_at', { ascending: false }),
+    supabaseAdmin.from('community_messages').select('*').eq('author_id', userId).order('created_at', { ascending: false }),
   ]);
 
-  res.json({
-    exported_at: new Date().toISOString(),
-    profile: profileRes.data,
-    entries: entriesRes.data || [],
-    comments: commentsRes.data || [],
-    community_messages: messagesRes.data || [],
+  const profile = profileRes.data;
+  const entries = entriesRes.data || [];
+  const comments = commentsRes.data || [];
+  const messages = messagesRes.data || [];
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', 'attachment; filename="guardian-data-export.pdf"');
+
+  const doc = new PDFDocument({ margin: 54, size: 'A4' });
+  doc.pipe(res);
+
+  const gold = '#b8862f';
+  const dim = '#666666';
+  const dark = '#1b2a3a';
+
+  function sectionHeading(text) {
+    doc.moveDown(1.2);
+    doc.fillColor(gold).fontSize(9).font('Helvetica-Bold')
+      .text(text.toUpperCase(), { characterSpacing: 1 });
+    doc.moveDown(0.3);
+    doc.strokeColor('#dddddd').lineWidth(1)
+      .moveTo(doc.x, doc.y).lineTo(doc.page.width - doc.page.margins.right, doc.y).stroke();
+    doc.moveDown(0.6);
+  }
+
+  // Cover
+  doc.fillColor(gold).fontSize(10).font('Helvetica-Bold').text('GUARDIAN', { characterSpacing: 2 });
+  doc.moveDown(0.4);
+  doc.fillColor(dark).fontSize(26).font('Helvetica-Bold').text('Your Data Export');
+  doc.moveDown(0.3);
+  doc.fillColor(dim).fontSize(10).font('Helvetica').text(`Generated ${new Date().toLocaleString()}`);
+
+  // Profile
+  sectionHeading('Profile');
+  doc.fillColor(dark).fontSize(11).font('Helvetica-Bold').text(profile?.display_name || 'Unnamed');
+  doc.font('Helvetica').fontSize(10).fillColor(dim);
+  if (profile?.username) doc.text(`Username: @${profile.username}`);
+  doc.text(`Role: ${profile?.role || 'unknown'}`);
+  if (profile?.bio) doc.text(`Bio: ${profile.bio}`);
+
+  // Journal entries
+  sectionHeading(`Journal Entries (${entries.length})`);
+  if (entries.length === 0) {
+    doc.fillColor(dim).fontSize(10).text('No entries recorded yet.');
+  }
+  entries.forEach((e, i) => {
+    if (i > 0) doc.moveDown(0.8);
+    doc.fillColor(dark).fontSize(12).font('Helvetica-Bold').text(e.title || '(untitled)');
+    doc.fillColor(dim).fontSize(9).font('Helvetica')
+      .text(`${e.type} · ${new Date(e.created_at).toLocaleString()} · ${e.visibility}`);
+    doc.moveDown(0.2);
+    doc.fillColor(dark).fontSize(10.5).font('Helvetica').text(e.content || '', { align: 'left' });
   });
+
+  // Comments
+  if (comments.length > 0) {
+    doc.addPage();
+    sectionHeading(`Comments You've Written (${comments.length})`);
+    comments.forEach((c, i) => {
+      if (i > 0) doc.moveDown(0.6);
+      doc.fillColor(dim).fontSize(9).font('Helvetica').text(new Date(c.created_at).toLocaleString());
+      doc.fillColor(dark).fontSize(10.5).text(c.body);
+    });
+  }
+
+  // Community messages
+  if (messages.length > 0) {
+    doc.addPage();
+    sectionHeading(`Community Messages (${messages.length})`);
+    messages.forEach((m, i) => {
+      if (i > 0) doc.moveDown(0.6);
+      doc.fillColor(dim).fontSize(9).font('Helvetica').text(new Date(m.created_at).toLocaleString());
+      doc.fillColor(dark).fontSize(10.5).text(m.body || '(attachment only)');
+    });
+  }
+
+  doc.end();
 });
 
 // Permanently delete the account. Cascades through entries, community
