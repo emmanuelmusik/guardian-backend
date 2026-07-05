@@ -235,6 +235,84 @@ router.delete('/:id', async (req, res) => {
   res.status(204).send();
 });
 
+// Mentor invites a specific person to join, by their user id (found
+// via username search) — the reverse of a join request.
+router.post('/:id/invite', async (req, res) => {
+  const { id } = req.params;
+  const { user_id } = req.body;
+
+  const { data: community } = await supabaseAdmin
+    .from('communities')
+    .select('name, mentor_id')
+    .eq('id', id)
+    .single();
+
+  if (!community || community.mentor_id !== req.user.id) {
+    return res.status(403).json({ error: "Only this community's mentor can invite people" });
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('community_members')
+    .insert({ community_id: id, user_id, role: 'member', status: 'invited' })
+    .select()
+    .single();
+
+  if (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'That person is already a member, invited, or has a pending request.' });
+    }
+    return res.status(500).json({ error: error.message });
+  }
+
+  await notify(user_id, {
+    type: 'community_invite',
+    title: "You've been invited",
+    body: `You've been invited to join ${community.name}.`,
+    link: `/communities/${id}`,
+  });
+
+  res.status(201).json(data);
+});
+
+// The invited person accepts or declines — different from join-requests,
+// where it's the mentor who responds
+router.patch('/:id/invitation', async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body; // 'accepted' | 'declined'
+
+  const { data: membership } = await supabaseAdmin
+    .from('community_members')
+    .select('status')
+    .eq('community_id', id)
+    .eq('user_id', req.user.id)
+    .maybeSingle();
+
+  if (!membership || membership.status !== 'invited') {
+    return res.status(403).json({ error: "You don't have a pending invitation to this community" });
+  }
+
+  if (status === 'declined') {
+    const { error } = await supabaseAdmin
+      .from('community_members')
+      .delete()
+      .eq('community_id', id)
+      .eq('user_id', req.user.id);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ status: 'declined' });
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('community_members')
+    .update({ status: 'accepted' })
+    .eq('community_id', id)
+    .eq('user_id', req.user.id)
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
 
