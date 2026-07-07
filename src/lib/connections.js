@@ -24,3 +24,15 @@ export async function isConnected(userA, userB) {
   const ids = await connectedUserIds(userA);
   return ids.has(userB);
 }
+
+// True if either person has blocked the other, in either direction
+export async function isBlocked(userA, userB) {
+  const { data } = await supabaseAdmin
+    .from('blocks')
+    .select('id')
+    .or(
+      `and(blocker_id.eq.${userA},blocked_id.eq.${userB}),and(blocker_id.eq.${userB},blocked_id.eq.${userA})`
+    )
+    .maybeSingle();
+  return !!data;
+}

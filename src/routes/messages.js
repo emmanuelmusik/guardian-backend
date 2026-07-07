@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requireAuth } from '../middleware/auth.js';
 import { notify } from '../lib/notify.js';
-import { connectedUserIds, isConnected } from '../lib/connections.js';
+import { connectedUserIds, isConnected, isBlocked } from '../lib/connections.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -13,10 +13,23 @@ router.get('/connections', async (req, res) => {
   const ids = Array.from(await connectedUserIds(req.user.id));
   if (ids.length === 0) return res.json([]);
 
+  const { data: blocked } = await supabaseAdmin
+    .from('blocks')
+    .select('blocker_id, blocked_id')
+    .or(`blocker_id.eq.${req.user.id},blocked_id.eq.${req.user.id}`);
+
+  const blockedIds = new Set();
+  (blocked || []).forEach((b) => {
+    blockedIds.add(b.blocker_id === req.user.id ? b.blocked_id : b.blocker_id);
+  });
+
+  const visibleIds = ids.filter((id) => !blockedIds.has(id));
+  if (visibleIds.length === 0) return res.json([]);
+
   const { data, error } = await supabaseAdmin
     .from('profiles')
     .select('id, display_name, username, avatar_url')
-    .in('id', ids);
+    .in('id', visibleIds);
 
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
@@ -28,10 +41,23 @@ router.get('/conversations', async (req, res) => {
   const ids = Array.from(await connectedUserIds(req.user.id));
   if (ids.length === 0) return res.json([]);
 
+  const { data: blocked } = await supabaseAdmin
+    .from('blocks')
+    .select('blocker_id, blocked_id')
+    .or(`blocker_id.eq.${req.user.id},blocked_id.eq.${req.user.id}`);
+
+  const blockedIds = new Set();
+  (blocked || []).forEach((b) => {
+    blockedIds.add(b.blocker_id === req.user.id ? b.blocked_id : b.blocker_id);
+  });
+
+  const visibleIds = ids.filter((id) => !blockedIds.has(id));
+  if (visibleIds.length === 0) return res.json([]);
+
   const { data: profiles, error: profileError } = await supabaseAdmin
     .from('profiles')
     .select('id, display_name, username, avatar_url, role')
-    .in('id', ids);
+    .in('id', visibleIds);
 
   if (profileError) return res.status(500).json({ error: profileError.message });
 
@@ -63,6 +89,10 @@ router.get('/conversations', async (req, res) => {
 router.get('/with/:userId', async (req, res) => {
   const { userId } = req.params;
 
+  if (await isBlocked(req.user.id, userId)) {
+    return res.status(403).json({ error: 'You cannot message this person' });
+  }
+
   if (!(await isConnected(req.user.id, userId))) {
     return res.status(403).json({ error: "You're not connected with this person yet" });
   }
@@ -93,6 +123,10 @@ router.post('/with/:userId', async (req, res) => {
   const { body } = req.body;
 
   if (!body || !body.trim()) return res.status(400).json({ error: 'Message body is required' });
+
+  if (await isBlocked(req.user.id, userId)) {
+    return res.status(403).json({ error: 'You cannot message this person' });
+  }
 
   if (!(await isConnected(req.user.id, userId))) {
     return res.status(403).json({ error: "You're not connected with this person yet" });
