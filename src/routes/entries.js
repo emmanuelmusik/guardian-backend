@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requireAuth } from '../middleware/auth.js';
 import { isConnected } from '../lib/connections.js';
+import { notify } from '../lib/notify.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -50,6 +51,17 @@ router.post('/', async (req, res) => {
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
+
+  if (data.visibility === 'person' && data.shared_with_user_id) {
+    const { data: sharer } = await supabaseAdmin.from('profiles').select('display_name, username').eq('id', req.user.id).single();
+    await notify(data.shared_with_user_id, {
+      type: 'entry_shared',
+      title: 'Something was shared with you',
+      body: `${sharer?.username ? '@' + sharer.username : sharer?.display_name || 'Someone'} shared "${data.title || 'an entry'}" with you.`,
+      link: '/shared-with-you',
+    });
+  }
+
   res.status(201).json(data);
 });
 
@@ -77,6 +89,17 @@ router.patch('/:id', async (req, res) => {
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
+
+  if (updates.visibility === 'person' && data.shared_with_user_id) {
+    const { data: sharer } = await supabaseAdmin.from('profiles').select('display_name, username').eq('id', req.user.id).single();
+    await notify(data.shared_with_user_id, {
+      type: 'entry_shared',
+      title: 'Something was shared with you',
+      body: `${sharer?.username ? '@' + sharer.username : sharer?.display_name || 'Someone'} shared "${data.title || 'an entry'}" with you.`,
+      link: '/shared-with-you',
+    });
+  }
+
   res.json(data);
 });
 

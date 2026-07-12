@@ -62,7 +62,12 @@ router.delete('/:id', async (req, res) => {
     .delete()
     .eq('id', req.params.id);
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    if (error.code === '23503') {
+      return res.status(409).json({ error: 'This material is still referenced elsewhere and could not be removed.' });
+    }
+    return res.status(500).json({ error: error.message });
+  }
   res.status(204).send();
 });
 

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requireAuth } from '../middleware/auth.js';
+import { notify } from '../lib/notify.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -33,10 +34,19 @@ router.post('/entry/:entryId', async (req, res) => {
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
+
+  const { data: entry } = await supabaseAdmin.from('entries').select('user_id, title').eq('id', entryId).single();
+  if (entry && entry.user_id !== req.user.id) {
+    await notify(entry.user_id, {
+      type: 'new_feedback',
+      title: 'New feedback',
+      body: `There's new feedback on "${entry.title || 'your entry'}".`,
+      link: '/',
+    });
+  }
+
   res.status(201).json(data);
 });
-
-// Edit a comment (author only)
 router.patch('/:id', async (req, res) => {
   const { body } = req.body;
 

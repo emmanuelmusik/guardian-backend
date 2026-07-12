@@ -180,11 +180,47 @@ router.get('/export', async (req, res) => {
   }
 });
 
-// Permanently delete the account. Cascades through entries, community
-// memberships, comments, etc. via the foreign keys already in schema.sql.
+// Permanently delete the account. Cleans up dependent rows explicitly
+// first (belt-and-suspenders alongside the database's own cascade
+// rules) so this can't fail on a foreign key it wasn't expecting.
 router.delete('/', async (req, res) => {
-  const { error } = await supabaseAdmin.auth.admin.deleteUser(req.user.id);
-  if (error) return res.status(500).json({ error: error.message });
+  const userId = req.user.id;
+
+  const cleanupTasks = [
+    ['comments', 'author_id'],
+    ['community_messages', 'author_id'],
+    ['direct_messages', 'sender_id'],
+    ['direct_messages', 'recipient_id'],
+    ['notifications', 'user_id'],
+    ['reports', 'reporter_id'],
+    ['reports', 'reported_user_id'],
+    ['blocks', 'blocker_id'],
+    ['blocks', 'blocked_id'],
+    ['mentor_connections', 'aspirant_id'],
+    ['mentor_connections', 'mentor_id'],
+    ['peer_connections', 'requester_id'],
+    ['peer_connections', 'recipient_id'],
+    ['community_members', 'user_id'],
+    ['entries', 'user_id'],
+    ['call_sessions', 'started_by'],
+    ['study_materials', 'recommended_by'],
+    ['featured_materials', 'added_by'],
+    ['communities', 'mentor_id'],
+  ];
+
+  for (const [table, column] of cleanupTasks) {
+    try {
+      await supabaseAdmin.from(table).delete().eq(column, userId);
+    } catch {
+      // Table or column may not exist in every deployment — safe to skip
+    }
+  }
+
+  const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
+  if (error) {
+    console.error('Account deletion failed:', error);
+    return res.status(500).json({ error: `Couldn't delete account: ${error.message}` });
+  }
   res.status(204).send();
 });
 
