@@ -25,12 +25,13 @@ router.get('/', async (req, res) => {
 });
 
 router.patch('/', async (req, res) => {
-  const { role, display_name, bio, onboarded, username } = req.body;
+  const { role, display_name, bio, onboarded, username, email_notifications_enabled } = req.body;
   const updates = { updated_at: new Date().toISOString() };
   if (role !== undefined) updates.role = role;
   if (display_name !== undefined) updates.display_name = display_name;
   if (bio !== undefined) updates.bio = bio;
   if (onboarded !== undefined) updates.onboarded = onboarded;
+  if (email_notifications_enabled !== undefined) updates.email_notifications_enabled = email_notifications_enabled;
 
   if (username !== undefined) {
     const normalized = String(username).toLowerCase().trim();

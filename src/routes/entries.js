@@ -1,9 +1,10 @@
 import { Router } from 'express';
-import PDFDocument from 'pdfkit';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requireAuth } from '../middleware/auth.js';
 import { isConnected } from '../lib/connections.js';
 import { notify } from '../lib/notify.js';
+import { drawEntriesPdf } from '../lib/entriesPdf.js';
+import PDFDocument from 'pdfkit';
 
 const router = Router();
 router.use(requireAuth);
@@ -149,32 +150,7 @@ function renderEntriesPdf(res, entries, headingTitle) {
 
     const doc = new PDFDocument({ margin: 54, size: 'A4' });
     doc.pipe(res);
-
-    const gold = '#b8862f';
-    const dim = '#666666';
-    const dark = '#1b2a3a';
-
-    doc.fillColor(gold).fontSize(10).font('Helvetica-Bold').text('GUARDIAN', { characterSpacing: 2 });
-    doc.moveDown(0.4);
-    doc.fillColor(dark).fontSize(24).font('Helvetica-Bold').text(headingTitle);
-    doc.moveDown(0.2);
-    doc.fillColor(dim).fontSize(10).font('Helvetica').text(`Exported ${new Date().toLocaleString()}`);
-    doc.moveDown(1.2);
-
-    entries.forEach((e, i) => {
-      if (i > 0) {
-        doc.moveDown(0.8);
-        doc.strokeColor('#dddddd').lineWidth(1)
-          .moveTo(doc.x, doc.y).lineTo(doc.page.width - doc.page.margins.right, doc.y).stroke();
-        doc.moveDown(0.8);
-      }
-      doc.fillColor(dark).fontSize(14).font('Helvetica-Bold').text(e.title || '(untitled)');
-      doc.fillColor(dim).fontSize(9).font('Helvetica')
-        .text(`${e.type} · ${new Date(e.created_at).toLocaleString()}`);
-      doc.moveDown(0.3);
-      doc.fillColor(dark).fontSize(11).font('Helvetica').text(e.content || '', { align: 'left' });
-    });
-
+    drawEntriesPdf(doc, entries, headingTitle);
     doc.end();
   } catch (err) {
     console.error('Entry PDF export failed:', err);
