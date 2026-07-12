@@ -182,6 +182,20 @@ function renderEntriesPdf(res, entries, headingTitle) {
     else res.end();
   }
 }
+
+// Entries shared publicly — visible to any signed-in Guardian user
+router.get('/public-feed', async (req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('entries')
+    .select('*, profiles!entries_user_id_fkey(display_name, username, avatar_url)')
+    .eq('visibility', 'public')
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
 router.get('/community/:communityId', async (req, res) => {
   const { communityId } = req.params;
 

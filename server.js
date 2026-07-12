@@ -16,6 +16,7 @@ import notificationsRouter from './src/routes/notifications.js';
 import usersRouter from './src/routes/users.js';
 import messagesRouter from './src/routes/messages.js';
 import moderationRouter from './src/routes/moderation.js';
+import publicPostsRouter from './src/routes/publicPosts.js';
 
 dotenv.config();
 
@@ -39,6 +40,7 @@ app.use('/api/notifications', notificationsRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/messages', messagesRouter);
 app.use('/api/moderation', moderationRouter);
+app.use('/api/public-posts', publicPostsRouter);
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`Guardian backend running on port ${PORT}`));

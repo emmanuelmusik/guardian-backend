@@ -444,6 +444,12 @@ router.post('/:id/media', upload.single('file'), async (req, res) => {
 
   const membership = await requireAcceptedMember(id, req.user.id);
   if (!membership) return res.status(403).json({ error: 'Not an accepted member of this community' });
+
+  const { data: uploader } = await supabaseAdmin.from('profiles').select('is_subscriber').eq('id', req.user.id).single();
+  if (!uploader?.is_subscriber) {
+    return res.status(403).json({ error: 'Sharing photos, videos, and audio is a subscriber feature.' });
+  }
+
   if (!req.file) return res.status(400).json({ error: 'No file provided' });
 
   const mime = req.file.mimetype || '';

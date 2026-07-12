@@ -1,8 +1,15 @@
 import { Router } from 'express';
+import multer from 'multer';
+import crypto from 'node:crypto';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requireAuth } from '../middleware/auth.js';
 import { notify } from '../lib/notify.js';
 import { connectedUserIds, isConnected, isBlocked } from '../lib/connections.js';
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 },
+});
 
 const router = Router();
 router.use(requireAuth);
@@ -120,9 +127,11 @@ router.get('/with/:userId', async (req, res) => {
 
 router.post('/with/:userId', async (req, res) => {
   const { userId } = req.params;
-  const { body } = req.body;
+  const { body, attachment_path, attachment_type } = req.body;
 
-  if (!body || !body.trim()) return res.status(400).json({ error: 'Message body is required' });
+  if ((!body || !body.trim()) && !attachment_path) {
+    return res.status(400).json({ error: 'Message body is required' });
+  }
 
   if (await isBlocked(req.user.id, userId)) {
     return res.status(403).json({ error: 'You cannot message this person' });
@@ -134,7 +143,13 @@ router.post('/with/:userId', async (req, res) => {
 
   const { data, error } = await supabaseAdmin
     .from('direct_messages')
-    .insert({ sender_id: req.user.id, recipient_id: userId, body: body.trim() })
+    .insert({
+      sender_id: req.user.id,
+      recipient_id: userId,
+      body: (body || '').trim(),
+      attachment_path: attachment_path || null,
+      attachment_type: attachment_type || null,
+    })
     .select()
     .single();
 
@@ -150,6 +165,66 @@ router.post('/with/:userId', async (req, res) => {
   });
 
   res.status(201).json(data);
+});
+
+// Upload a photo/video/audio attachment for a direct message —
+// subscriber-only feature
+router.post('/with/:userId/media', upload.single('file'), async (req, res) => {
+  const { userId } = req.params;
+
+  if (await isBlocked(req.user.id, userId)) {
+    return res.status(403).json({ error: 'You cannot message this person' });
+  }
+  if (!(await isConnected(req.user.id, userId))) {
+    return res.status(403).json({ error: "You're not connected with this person yet" });
+  }
+
+  const { data: uploader } = await supabaseAdmin.from('profiles').select('is_subscriber').eq('id', req.user.id).single();
+  if (!uploader?.is_subscriber) {
+    return res.status(403).json({ error: 'Sharing photos, videos, and audio in messages is a subscriber feature.' });
+  }
+  if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+  const mime = req.file.mimetype || '';
+  const attachmentType = mime.startsWith('image/')
+    ? 'image'
+    : mime.startsWith('video/')
+      ? 'video'
+      : mime.startsWith('audio/')
+        ? 'audio'
+        : null;
+  if (!attachmentType) return res.status(400).json({ error: 'Only image, video, and audio files are supported' });
+
+  const safeName = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const path = `${[req.user.id, userId].sort().join('-')}/${crypto.randomUUID()}-${safeName}`;
+
+  const { error: uploadError } = await supabaseAdmin.storage
+    .from('dm-media')
+    .upload(path, req.file.buffer, { contentType: mime });
+
+  if (uploadError) return res.status(500).json({ error: uploadError.message });
+  res.status(201).json({ attachment_path: path, attachment_type: attachmentType });
+});
+
+// Get a temporary viewing URL for a DM attachment — only the sender or
+// recipient of that specific message can view it
+router.get('/media-url', async (req, res) => {
+  const { path } = req.query;
+  if (!path) return res.status(400).json({ error: 'path is required' });
+
+  const { data: message } = await supabaseAdmin
+    .from('direct_messages')
+    .select('sender_id, recipient_id')
+    .eq('attachment_path', path)
+    .maybeSingle();
+
+  if (!message || (message.sender_id !== req.user.id && message.recipient_id !== req.user.id)) {
+    return res.status(403).json({ error: 'Not authorized to view this attachment' });
+  }
+
+  const { data, error } = await supabaseAdmin.storage.from('dm-media').createSignedUrl(String(path), 3600);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ url: data.signedUrl });
 });
 
 export default router;
