@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import PDFDocument from 'pdfkit';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requireAuth } from '../middleware/auth.js';
 import { isConnected } from '../lib/connections.js';
@@ -115,7 +116,72 @@ router.delete('/:id', async (req, res) => {
   res.status(204).send();
 });
 
-// Entries shared to a specific community — only for accepted members
+// Export all of the current user's entries as a single PDF
+router.get('/export', async (req, res) => {
+  const { data: entries, error } = await supabaseAdmin
+    .from('entries')
+    .select('*')
+    .eq('user_id', req.user.id)
+    .order('created_at', { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+  renderEntriesPdf(res, entries, 'Your Journal');
+});
+
+// Export a single entry as a PDF
+router.get('/:id/export', async (req, res) => {
+  const { data: entry, error } = await supabaseAdmin
+    .from('entries')
+    .select('*')
+    .eq('id', req.params.id)
+    .eq('user_id', req.user.id)
+    .single();
+
+  if (error || !entry) return res.status(404).json({ error: 'Entry not found' });
+  renderEntriesPdf(res, [entry], entry.title || 'Journal Entry');
+});
+
+function renderEntriesPdf(res, entries, headingTitle) {
+  try {
+    res.setHeader('Content-Type', 'application/pdf');
+    const filename = headingTitle.replace(/[^a-zA-Z0-9._ -]/g, '').trim() || 'journal';
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}.pdf"`);
+
+    const doc = new PDFDocument({ margin: 54, size: 'A4' });
+    doc.pipe(res);
+
+    const gold = '#b8862f';
+    const dim = '#666666';
+    const dark = '#1b2a3a';
+
+    doc.fillColor(gold).fontSize(10).font('Helvetica-Bold').text('GUARDIAN', { characterSpacing: 2 });
+    doc.moveDown(0.4);
+    doc.fillColor(dark).fontSize(24).font('Helvetica-Bold').text(headingTitle);
+    doc.moveDown(0.2);
+    doc.fillColor(dim).fontSize(10).font('Helvetica').text(`Exported ${new Date().toLocaleString()}`);
+    doc.moveDown(1.2);
+
+    entries.forEach((e, i) => {
+      if (i > 0) {
+        doc.moveDown(0.8);
+        doc.strokeColor('#dddddd').lineWidth(1)
+          .moveTo(doc.x, doc.y).lineTo(doc.page.width - doc.page.margins.right, doc.y).stroke();
+        doc.moveDown(0.8);
+      }
+      doc.fillColor(dark).fontSize(14).font('Helvetica-Bold').text(e.title || '(untitled)');
+      doc.fillColor(dim).fontSize(9).font('Helvetica')
+        .text(`${e.type} · ${new Date(e.created_at).toLocaleString()}`);
+      doc.moveDown(0.3);
+      doc.fillColor(dark).fontSize(11).font('Helvetica').text(e.content || '', { align: 'left' });
+    });
+
+    doc.end();
+  } catch (err) {
+    console.error('Entry PDF export failed:', err);
+    if (!res.headersSent) res.status(500).json({ error: `Export failed: ${err.message}` });
+    else res.end();
+  }
+}
 router.get('/community/:communityId', async (req, res) => {
   const { communityId } = req.params;
 
