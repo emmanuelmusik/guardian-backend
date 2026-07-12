@@ -35,14 +35,32 @@ router.post('/entry/:entryId', async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
 
-  const { data: entry } = await supabaseAdmin.from('entries').select('user_id, title').eq('id', entryId).single();
-  if (entry && entry.user_id !== req.user.id) {
-    await notify(entry.user_id, {
-      type: 'new_feedback',
-      title: 'New feedback',
-      body: `There's new feedback on "${entry.title || 'your entry'}".`,
-      link: `/?entry=${entry.id}`,
-    });
+  const { data: entry } = await supabaseAdmin
+    .from('entries')
+    .select('user_id, title, visibility, shared_with_user_id')
+    .eq('id', entryId)
+    .single();
+
+  if (entry) {
+    // Notify everyone involved in this entry's sharing — the owner,
+    // and whoever it was shared with directly — except whoever just
+    // left this comment.
+    const interestedParties = new Set([entry.user_id]);
+    if (entry.visibility === 'person' && entry.shared_with_user_id) {
+      interestedParties.add(entry.shared_with_user_id);
+    }
+    interestedParties.delete(req.user.id);
+
+    await Promise.all(
+      Array.from(interestedParties).map((userId) =>
+        notify(userId, {
+          type: 'new_feedback',
+          title: 'New feedback',
+          body: `There's new feedback on "${entry.title || 'an entry'}".`,
+          link: userId === entry.user_id ? `/?entry=${entry.id}` : '/shared-with-you',
+        })
+      )
+    );
   }
 
   res.status(201).json(data);
