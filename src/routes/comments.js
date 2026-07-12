@@ -41,7 +41,7 @@ router.post('/entry/:entryId', async (req, res) => {
       type: 'new_feedback',
       title: 'New feedback',
       body: `There's new feedback on "${entry.title || 'your entry'}".`,
-      link: '/',
+      link: `/?entry=${entry.id}`,
     });
   }
 
