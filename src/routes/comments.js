@@ -57,7 +57,7 @@ router.post('/entry/:entryId', async (req, res) => {
           type: 'new_feedback',
           title: 'New feedback',
           body: `There's new feedback on "${entry.title || 'an entry'}".`,
-          link: userId === entry.user_id ? `/?entry=${entry.id}` : '/shared-with-you',
+          link: userId === entry.user_id ? `/?entry=${entry.id}` : `/shared-with-you?entry=${entryId}`,
         })
       )
     );

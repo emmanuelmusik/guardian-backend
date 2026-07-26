@@ -60,7 +60,7 @@ router.post('/', async (req, res) => {
       type: 'entry_shared',
       title: 'Something was shared with you',
       body: `${sharer?.username ? '@' + sharer.username : sharer?.display_name || 'Someone'} shared "${data.title || 'an entry'}" with you.`,
-      link: '/shared-with-you',
+      link: `/shared-with-you?entry=${data.id}`,
     });
   }
 
@@ -98,7 +98,7 @@ router.patch('/:id', async (req, res) => {
       type: 'entry_shared',
       title: 'Something was shared with you',
       body: `${sharer?.username ? '@' + sharer.username : sharer?.display_name || 'Someone'} shared "${data.title || 'an entry'}" with you.`,
-      link: '/shared-with-you',
+      link: `/shared-with-you?entry=${data.id}`,
     });
   }
 
