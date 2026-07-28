@@ -84,20 +84,31 @@ router.get('/:id', async (req, res) => {
 
   let myConnection = null;
   if (person.role === 'mentor') {
+    // Check BOTH directions — they may have requested to connect with
+    // me rather than the other way round. Only checking one direction
+    // meant an incoming request looked like "no connection", so the
+    // recipient saw a Connect button instead of Accept, and tapping it
+    // created a second, reversed request.
     const { data } = await supabaseAdmin
       .from('mentor_connections')
-      .select('id, status')
-      .eq('aspirant_id', req.user.id)
-      .eq('mentor_id', person.id)
+      .select('id, status, aspirant_id, mentor_id')
+      .or(`and(aspirant_id.eq.${req.user.id},mentor_id.eq.${person.id}),and(aspirant_id.eq.${person.id},mentor_id.eq.${req.user.id})`)
       .maybeSingle();
-    if (data) myConnection = { type: 'mentor', ...data };
+    if (data) {
+      myConnection = {
+        type: 'mentor',
+        ...data,
+        // True when they sent it to me, so the UI can offer Accept/Decline
+        incoming: data.mentor_id === req.user.id,
+      };
+    }
   } else {
     const { data } = await supabaseAdmin
       .from('peer_connections')
       .select('id, status, requester_id')
       .or(`and(requester_id.eq.${req.user.id},recipient_id.eq.${person.id}),and(requester_id.eq.${person.id},recipient_id.eq.${req.user.id})`)
       .maybeSingle();
-    if (data) myConnection = { type: 'peer', ...data };
+    if (data) myConnection = { type: 'peer', ...data, incoming: data.requester_id === person.id };
   }
 
   res.json({ ...person, myConnection, isSelf: false });

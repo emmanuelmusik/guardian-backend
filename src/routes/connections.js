@@ -1,6 +1,12 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requireAuth } from '../middleware/auth.js';
+import { notify } from '../lib/notify.js';
+
+async function nameOf(userId) {
+  const { data } = await supabaseAdmin.from('profiles').select('display_name, username').eq('id', userId).single();
+  return data?.username ? `@${data.username}` : data?.display_name || 'Someone';
+}
 
 const router = Router();
 router.use(requireAuth);
@@ -41,6 +47,14 @@ router.post('/', async (req, res) => {
     }
     return res.status(500).json({ error: error.message });
   }
+
+  await notify(mentor_id, {
+    type: 'connection_request',
+    title: 'New connection request',
+    body: `${await nameOf(req.user.id)} wants to connect with you.`,
+    link: '/mentorship',
+  });
+
   res.status(201).json(data);
 });
 
@@ -58,7 +72,37 @@ router.patch('/:id', async (req, res) => {
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
+
+  if (status === 'accepted') {
+    await notify(data.aspirant_id, {
+      type: 'connection_accepted',
+      title: 'Connection accepted',
+      body: `${await nameOf(req.user.id)} accepted your connection request.`,
+      link: `/profile/${req.user.id}`,
+    });
+  }
+
   res.json(data);
+});
+
+// Disconnect from someone entirely — removes any mentor or peer
+// connection between the two people, in either direction. Either side
+// of a connection can do this.
+router.delete('/with/:userId', async (req, res) => {
+  const { userId } = req.params;
+  const me = req.user.id;
+
+  await supabaseAdmin
+    .from('mentor_connections')
+    .delete()
+    .or(`and(aspirant_id.eq.${me},mentor_id.eq.${userId}),and(aspirant_id.eq.${userId},mentor_id.eq.${me})`);
+
+  await supabaseAdmin
+    .from('peer_connections')
+    .delete()
+    .or(`and(requester_id.eq.${me},recipient_id.eq.${userId}),and(requester_id.eq.${userId},recipient_id.eq.${me})`);
+
+  res.status(204).send();
 });
 
 // List my connections, whether I'm the aspirant or the mentor in them

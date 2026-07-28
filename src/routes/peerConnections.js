@@ -1,6 +1,12 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requireAuth } from '../middleware/auth.js';
+import { notify } from '../lib/notify.js';
+
+async function nameOf(userId, supabaseAdmin_) {
+  const { data } = await supabaseAdmin_.from('profiles').select('display_name, username').eq('id', userId).single();
+  return data?.username ? `@${data.username}` : data?.display_name || 'Someone';
+}
 
 const router = Router();
 router.use(requireAuth);
@@ -50,6 +56,14 @@ router.post('/', async (req, res) => {
     }
     return res.status(500).json({ error: error.message });
   }
+
+  await notify(recipient_id, {
+    type: 'connection_request',
+    title: 'New connection request',
+    body: `${await nameOf(req.user.id, supabaseAdmin)} wants to connect with you.`,
+    link: '/mentorship',
+  });
+
   res.status(201).json(data);
 });
 
@@ -67,6 +81,16 @@ router.patch('/:id', async (req, res) => {
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
+
+  if (status === 'accepted') {
+    await notify(data.requester_id, {
+      type: 'connection_accepted',
+      title: 'Connection accepted',
+      body: `${await nameOf(req.user.id, supabaseAdmin)} accepted your connection request.`,
+      link: `/profile/${req.user.id}`,
+    });
+  }
+
   res.json(data);
 });
 
