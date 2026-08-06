@@ -16,7 +16,7 @@ function getResendClient() {
   return resendClient;
 }
 
-export async function sendEmail({ to, subject, html, attachments }) {
+export async function sendEmail({ to, subject, html, attachments, replyTo }) {
   const resend = getResendClient();
   if (!resend) {
     console.error('Email not sent — RESEND_API_KEY is not configured.');
@@ -24,7 +24,7 @@ export async function sendEmail({ to, subject, html, attachments }) {
   }
 
   try {
-    const result = await resend.emails.send({ from: FROM, to, subject, html, attachments });
+    const result = await resend.emails.send({ from: FROM, to, subject, html, attachments, replyTo });
     if (result.error) {
       console.error('Resend send failed:', result.error);
     }
