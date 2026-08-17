@@ -31,13 +31,6 @@ router.post('/', async (req, res) => {
   const { content, attachment_path, attachment_type } = req.body;
   if (!content || !content.trim()) return res.status(400).json({ error: 'content is required' });
 
-  if (attachment_path) {
-    const { data: poster } = await supabaseAdmin.from('profiles').select('is_subscriber').eq('id', req.user.id).single();
-    if (!poster?.is_subscriber) {
-      return res.status(403).json({ error: 'Sharing media on the public page is a subscriber feature.' });
-    }
-  }
-
   const { data, error } = await supabaseAdmin
     .from('public_posts')
     .insert({
@@ -54,10 +47,6 @@ router.post('/', async (req, res) => {
 });
 
 router.post('/media', upload.single('file'), async (req, res) => {
-  const { data: poster } = await supabaseAdmin.from('profiles').select('is_subscriber').eq('id', req.user.id).single();
-  if (!poster?.is_subscriber) {
-    return res.status(403).json({ error: 'Sharing media on the public page is a subscriber feature.' });
-  }
   if (!req.file) return res.status(400).json({ error: 'No file provided' });
 
   const mime = req.file.mimetype || '';

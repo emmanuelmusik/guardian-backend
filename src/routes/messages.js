@@ -167,8 +167,7 @@ router.post('/with/:userId', async (req, res) => {
   res.status(201).json(data);
 });
 
-// Upload a photo/video/audio attachment for a direct message —
-// subscriber-only feature
+// Upload a photo/video/audio attachment for a direct message
 router.post('/with/:userId/media', upload.single('file'), async (req, res) => {
   const { userId } = req.params;
 
@@ -179,10 +178,6 @@ router.post('/with/:userId/media', upload.single('file'), async (req, res) => {
     return res.status(403).json({ error: "You're not connected with this person yet" });
   }
 
-  const { data: uploader } = await supabaseAdmin.from('profiles').select('is_subscriber').eq('id', req.user.id).single();
-  if (!uploader?.is_subscriber) {
-    return res.status(403).json({ error: 'Sharing photos, videos, and audio in messages is a subscriber feature.' });
-  }
   if (!req.file) return res.status(400).json({ error: 'No file provided' });
 
   const mime = req.file.mimetype || '';
