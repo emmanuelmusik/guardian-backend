@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { requireAuth } from '../middleware/auth.js';
-
 const router = Router();
-router.use(requireAuth);
+
+// Deliberately public — this only proxies public-domain scripture, and
+// guest mode (using the app without an account) needs it to work.
 
 const BASE = process.env.BIBLE_API_BASE || 'https://bible-api.com';
 
