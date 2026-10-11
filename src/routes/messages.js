@@ -175,6 +175,17 @@ router.get('/with/:userId', async (req, res) => {
     .eq('recipient_id', req.user.id)
     .eq('read', false);
 
+  // Also clear any "new message" bell notifications from this sender —
+  // reading the thread they point to makes them stale, even if the user
+  // got here without clicking the notification itself.
+  await supabaseAdmin
+    .from('notifications')
+    .update({ read: true })
+    .eq('user_id', req.user.id)
+    .eq('type', 'new_message')
+    .eq('link', `/messages/${userId}`)
+    .eq('read', false);
+
   res.json(await attachExtras(data, req.user.id));
 });
 
